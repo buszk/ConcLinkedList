@@ -43,7 +43,9 @@ ALIGNED(64) uint8_t running[64];
 //per-thread seeds for the custom random function
 __thread unsigned long * seeds;
 
-llist_t * the_list;
+typedef int64_t val_t;
+
+llist<val_t, INT_MIN, INT_MAX> * the_list;
 
 
 //a simple barrier implementation
@@ -121,7 +123,7 @@ void *test(void *data)
     for (i=0;i<d->num_add;++i) {
         the_value = (val_t) my_random(&seeds[0],&seeds[1],&seeds[2]) & rand_max;
         //we make sure the insert was effective (as opposed to just updating an existing entry)
-        if (list_add(the_list,the_value)==0) {
+        if (the_list->add(the_value)==0) {
             i--;
         }
     }
@@ -136,16 +138,16 @@ void *test(void *data)
         op = my_random(&seeds[0],&seeds[1],&seeds[2]) & 0xff;
         if (op < read_thresh) {
             //do a find operation
-            list_contains(the_list,the_value);
+            the_list->contains(the_value);
         } else if (last == -1) {
             //do a write operation
-            if (list_add(the_list,the_value)) {
+            if (the_list->add(the_value)) {
                 d->num_insert++;
                 last=1;
             }
         } else {
             //do a delete operation
-            if (list_remove(the_list,the_value)) {
+            if (the_list->remove(the_value)) {
                 d->num_remove++;
                 last=-1;
             }
@@ -260,7 +262,7 @@ int main(int argc, char* const argv[]) {
     max_key = pow2roundup(max_key)-1;
 
     //initialization of the list
-    the_list = list_new();
+    the_list = new llist<val_t, INT_MIN, INT_MAX>();
 
     //initialize the data which will be passed to the threads
     if ((data = (thread_data_t *)malloc(num_threads * sizeof(thread_data_t))) == NULL) {
@@ -349,7 +351,7 @@ int main(int argc, char* const argv[]) {
 
     printf("Duration      : %d (ms)\n", duration);
     printf("#txs     : %lu (%f / s)\n", operations, operations * 1000.0 / duration);
-    printf("Expected size: %ld Actual size: %d\n",reported_total,list_size(the_list));
+    printf("Expected size: %ld Actual size: %d\n",reported_total,the_list->size());
 
     free(threads);
     free(data);
