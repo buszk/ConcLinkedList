@@ -50,12 +50,12 @@ inline fl_node_t* get_fl_head(uint64_t n) {
   return (fl_node_t*)(n & 0xffffffffffff);
 }
 
-inline uint16_t get_fl_size(uint64_t n) {
+inline uint16_t get_fl_aba(uint64_t n) {
   return (uint16_t) ((n &0xffff000000000000) >> (48));
 }
 
-inline uint64_t get_fl(uint16_t size, fl_node_t* ptr) {
-  return ((uint64_t)size << 48) | (uintptr_t)ptr;
+inline uint64_t get_fl(uint16_t aba, fl_node_t* ptr) {
+  return ((uint64_t)aba << 48) | (uintptr_t)ptr;
 }
 
 inline int is_marked_ref(node_t * i);
@@ -152,7 +152,7 @@ llist_t* list_new()
   // now need to create the sentinel node
   the_list->head = NULL;
   the_list->size = 0;
-  the_list->fl = NULL;
+  the_list->fl = 0;
   return the_list;
 }
 
@@ -175,37 +175,31 @@ node_t* list_add(llist_t *the_list, val_t val)
 {
   
   fl_node_t *fl_head, *fl_next;
-  node_t *right, *left, *unmarked;
-  uint16_t fl_size;
+  node_t *left, *unmarked;
+  uint16_t fl_aba;
   uint64_t fl_last, fl;
   fl_head = fl_next = NULL;
-  right = left = unmarked = NULL;
+  left = unmarked = NULL;
 
-  //list_check_flist(the_list);
-  int count = 0;
   do {
     fl_last = the_list->fl;
     fl_head = get_fl_head(fl_last);
-    fl_size = get_fl_size(fl_last);
+    fl_aba = get_fl_aba(fl_last);
     fl_next = fl_head ? fl_head->next : NULL;
-    fl = get_fl(fl_size-1, fl_next);
-    
-    // if (count++)
-    //   fprintf(stderr, "second1\n");
+    fl = get_fl(fl_aba+1, fl_next);
   } while(fl_head && CAS_PTR(&(the_list->fl), fl_last, fl) != fl_last);
 
-  //list_check_flist(the_list);
 
   if (fl_head) {
-    //printf("Head: %016lx  Next: %016lx\n", fl_head, fl_head->next);
     left = (node_t*) fl_head;
-    if (!is_marked_ref(left->next)) {
-      //fprintf(stderr, "ERROR3\n");
+    if (is_marked_ref(left->next)) {
+      
+      left->next = get_unmarked_ref(left->next);
+      left->data = val;
+      FAI_U32(&(the_list->size));
+      return left;
     }
-    left->next = get_unmarked_ref(left->next);
-    left->data = val;
-    FAI_U32(&(the_list->size));
-    return left;
+    fprintf(stderr, "ERROR3\n");
   }
   node_t *new_elem = new_node(val, NULL);
   do {
@@ -225,7 +219,7 @@ void list_remove(llist_t *the_list, node_t* node)
 {
   fl_node_t *fl_node, *fl_head;
   uint64_t fl_last, fl;
-  uint16_t fl_size;
+  uint16_t fl_aba;
   
   if (node->next == get_marked_ref(node->next)) 
     return;
@@ -233,15 +227,12 @@ void list_remove(llist_t *the_list, node_t* node)
   node->next = get_marked_ref(node->next);
   fl_node = (fl_node_t*) node;
 
-  int count = 0;
   while (true) {
     fl_last = the_list->fl;
     fl_head = get_fl_head(fl_last);
-    fl_size = get_fl_size(fl_last);
+    fl_aba = get_fl_aba(fl_last);
     fl_node->next = fl_head;
-    fl = get_fl(fl_size+1, fl_node);
-    // if (count++)
-    //   fprintf(stderr, "second2\n");
+    fl = get_fl(fl_aba+1, fl_node);
     if (CAS_PTR(&(the_list->fl), fl_last, fl) == fl_last){
       FAD_U32(&(the_list->size));
       return;
@@ -264,30 +255,29 @@ int list_check(llist_t *the_list) {
 }
 
 void list_print(llist_t *the_list) {
-  printf("free list head: [%016lx] \n", get_fl_head(the_list->fl));
+  printf("free list head: [%016lx] \n", (uintptr_t)get_fl_head(the_list->fl));
   node_t *n, *unmarked;
   n = the_list->head;
   while (n)
   {
     unmarked = get_unmarked_ref(n->next);
-    printf("[%016lx] next: %016lx data: %08lx pad: %015lx\n", n, n->next, n->data, n->padding);
+    printf("[%016lx] next: %016lx data: %08lx pad: %015lx\n", (uintptr_t)n, (uintptr_t)n->next, (uintptr_t)n->data, (uintptr_t)n->padding);
     n = unmarked;
   }
 }
 
 int list_check_flist(llist_t *the_list) {
-  fl_node_t *n;
+  node_t *n, *unmarked;
   size_t size;
-  n = get_fl_head(the_list->fl);
+  n = the_list->head;
   size = 0;
-  while(n) {
-    if (n == n->next)
-      return size;
-    n = n->next;
-    size++;
+  while (n)
+  {
+    unmarked = get_unmarked_ref(n->next);
+    if (n->next != unmarked) size ++;
+    n = unmarked;
   }
   return size;
 }
-
 
 #endif

@@ -120,7 +120,6 @@ void *test(void *data)
     //before starting the test, we insert a number of elements in the data structure
     //we do this at each thread to avoid the situation where the entire data structure 
     //resides in the same memory node
-    //for (i=0;i<5;++i) {
     for (i=0;i<d->num_add;++i) {
         the_value = (val_t) my_random(&seeds[0],&seeds[1],&seeds[2]) & rand_max;
         //we make sure the insert was effective (as opposed to just updating an existing entry)
@@ -345,7 +344,8 @@ int main(int argc, char* const argv[]) {
 
     printf("Duration      : %d (ms)\n", duration);
     printf("#txs     : %lu (%f / s)\n", operations, operations * 1000.0 / duration);
-    printf("Expected size: %ld Actual size: %d Check size: %d Freelist size: %d\n",reported_total,list_size(the_list),list_check(the_list), list_check_flist(the_list));
+    printf("Expected size: %ld Actual size: %d\n",reported_total,list_size(the_list));
+    printf("Check size: %d Freelist size: %x\n" ,list_check(the_list),list_check_flist(the_list));
 
     //list_print(the_list);
 
