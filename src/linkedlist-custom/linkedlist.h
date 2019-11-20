@@ -29,6 +29,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <stdint.h>
+#include <memory>
 
 #include "atomic_ops_if.h"
 
@@ -55,13 +56,14 @@ struct fl_node {
 
 };
 
-template <typename T>
+template <typename T, class Alloc = std::allocator<node<T>>>
 class llist 
 {
 private:
 	node<T> *head;
 	uint32_t list_size;
   uint64_t fl_aba_head;
+  Alloc _alloc;
   /*
   * The five following functions handle the low-order mark bit that indicates
   * whether a node is logically deleted (1) or not (0).
@@ -144,8 +146,8 @@ node<T>::node(T val, node<T>* _next) {
   padding = 0;
 }
 
-template <typename T>
-llist<T>::llist()
+template <typename T, class Alloc>
+llist<T, Alloc>::llist()
 {
   //printf("Create list method\n");
   head = NULL;
@@ -153,20 +155,20 @@ llist<T>::llist()
   fl_aba_head = 0;
 }
 
-template <typename T>
-llist<T>::~llist()
+template <typename T, class Alloc>
+llist<T, Alloc>::~llist()
 {
   //printf("Delete list method\n");
   node<T> *n = head;
   while (head) {
     head = get_unmarked_ref(head->next);
-    delete n;
+    _alloc.deallocate(n, 1);
     n = head;
   }
 }
 
-template <typename T>
-int llist<T>::size() 
+template <typename T, class Alloc>
+int llist<T, Alloc>::size() 
 { 
   return list_size; 
 } 
@@ -177,8 +179,8 @@ int llist<T>::size()
  * If there is a position in free list, it tries to use the node
  *  from free list. Otherwise, it allocates a new node as the new head.
  */
-template <typename T>
-node<T>* llist<T>::add(T val)
+template <typename T, class Alloc>
+node<T>* llist<T, Alloc>::add(T val)
 {
   
   fl_node<T> *fl_head, *fl_next;
@@ -205,7 +207,11 @@ node<T>* llist<T>::add(T val)
       return left;
     }
   }
-  node<T> *new_elem = new node<T>(val, NULL);
+  node<T> *new_elem = _alloc.allocate(1);
+  new_elem->data = val;
+  new_elem->next = NULL;
+  new_elem->padding = 0;
+
   do {
     left = head;
     new_elem->next = left;
@@ -218,8 +224,8 @@ node<T>* llist<T>::add(T val)
  * remove deletes a node with givien iterator 
  * It adds the node to free list, so the node can be later reused.
  */
-template <typename T>
-void llist<T>::remove(node<T>* node)
+template <typename T, class Alloc>
+void llist<T, Alloc>::remove(node<T>* node)
 {
   fl_node<T> *fl_new_node, *fl_head;
   uint64_t fl_aba_head_last, fl_aba_head_new;
@@ -249,8 +255,8 @@ void llist<T>::remove(node<T>* node)
  * 
  * This function may ends in infinite loop if some terrible bug is present.
  */
-template <typename T>
-int llist<T>::check() {
+template <typename T, class Alloc>
+int llist<T, Alloc>::check() {
   node<T> *n, *unmarked;
   size_t size;
   n = head;
@@ -269,8 +275,8 @@ int llist<T>::check() {
  * 
  *  This function may ends in infinite loop if some terrible bug is present.
  */
-template <typename T>
-void llist<T>::print() {
+template <typename T, class Alloc>
+void llist<T, Alloc>::print() {
   printf("free list head: [%016lx] \n", (uintptr_t)get_fl_head(fl_aba_head));
   node<T> *n, *unmarked;
   n = head;
@@ -287,8 +293,8 @@ void llist<T>::print() {
  * 
  *  This function may ends in infinite loop if some terrible bug is present.
  */
-template <typename T>
-int llist<T>::check_flist() {
+template <typename T, class Alloc>
+int llist<T, Alloc>::check_flist() {
   node<T> *n, *unmarked;
   size_t size;
   n = head;
