@@ -35,6 +35,7 @@ uint32_t finds;
 uint32_t updates;
 uint32_t max_key;
 
+typedef intptr_t val_t;
 //static volatile int stop;
 
 //used to signal the threads when to stop
@@ -43,7 +44,7 @@ ALIGNED(64) uint8_t running[64];
 //per-thread seeds for the custom random function
 __thread unsigned long * seeds;
 
-llist_t * the_list;
+llist<val_t> * the_list;
 
 
 //a simple barrier implementation
@@ -113,7 +114,7 @@ void *test(void *data)
     val_t the_value;
     int i;
     int last = -1;
-    node_t * pointers[2000];
+    node<val_t> * pointers[2000];
     size_t size = 0;
 
     //before starting the test, we insert a number of elements in the data structure
@@ -122,7 +123,7 @@ void *test(void *data)
     for (i=0;i<d->num_add;++i) {
         the_value = (val_t) my_random(&seeds[0],&seeds[1],&seeds[2]) & rand_max;
         //we make sure the insert was effective (as opposed to just updating an existing entry)
-        pointers[size++] = list_add(the_list,the_value);
+        pointers[size++] = the_list->add(the_value);
     }
 
     /* Wait on barrier */
@@ -133,12 +134,12 @@ void *test(void *data)
         the_value = my_random(&seeds[0],&seeds[1],&seeds[2]) & rand_max;
         if (last == -1 || last == -2) {
             //do a write operation
-            pointers[size++] = list_add(the_list,the_value);
+            pointers[size++] = the_list->add(the_value);
             d->num_insert++;
             last--;
         } else {
             //do a delete operation
-            list_remove(the_list, pointers[--size]);
+            the_list->remove( pointers[--size]);
             d->num_remove++;
             if (last-- == -4) last = -1;
         }
@@ -252,7 +253,7 @@ int main(int argc, char* const argv[]) {
     max_key = pow2roundup(max_key)-1;
 
     //initialization of the list
-    the_list = list_new();
+    the_list = new llist<val_t>();
 
     //initialize the data which will be passed to the threads
     if ((data = (thread_data_t *)malloc(num_threads * sizeof(thread_data_t))) == NULL) {
@@ -341,10 +342,10 @@ int main(int argc, char* const argv[]) {
 
     printf("Duration      : %d (ms)\n", duration);
     printf("#txs     : %lu (%f / s)\n", operations, operations * 1000.0 / duration);
-    printf("Expected size: %ld Actual size: %d\n",reported_total,list_size(the_list));
-    printf("Check size: %d Freelist size: %x\n" ,list_check(the_list),list_check_flist(the_list));
+    printf("Expected size: %ld Actual size: %d\n",reported_total,the_list->size());
+    printf("Check size: %d Freelist size: %x\n" ,the_list->check(),the_list->check_flist());
 
-    //list_print(the_list);
+    //the_list->print(the_list);
 
     free(threads);
     free(data);
