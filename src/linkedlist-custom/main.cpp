@@ -349,6 +349,7 @@ int main(int argc, char* const argv[]) {
 
     free(threads);
     free(data);
+    delete the_list;
 
     return 0;
 

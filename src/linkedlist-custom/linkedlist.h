@@ -1,8 +1,20 @@
 /*
  *  linkedlist.h
- *  interface for the list
- *
+ *  template class for the list
+ * 
+ *  Originally implementd by gavra0 at https://github.com/gavra0/ConcLinkedList
+ *  Modified to fit specific need of mine. 
+ * 
+ *  Description:
+ *   Lock-free linkedlist implementation of Harris' algorithm
+ *   "A Pragmatic Implementation of Non-Blocking Linked Lists" 
+ *   T. Harris, p. 300-314, DISC 2001.
+ * 
+ *  Modification:
+ *   Remove search and contains operations
+ *   Assume the remove caller has the iterator
  */
+
 #ifndef LLIST_H_
 #define LLIST_H_
 
@@ -48,7 +60,7 @@ class llist
 {
 private:
 	node<T> *head;
-	uint32_t _size;
+	uint32_t list_size;
   uint64_t fl_aba_head;
   /*
   * The five following functions handle the low-order mark bit that indicates
@@ -90,16 +102,26 @@ private:
   {
     return (node<T> *) (((uintptr_t)w) | 0x1L);
   }
-
-  inline fl_node<T>* get_fl_head(uint64_t n) {
+  /*
+  * The three following functions handle the 64-bit number 
+  *  that is consisted of aba number (high 16 bits) and
+  *  head to free list node (low 48 bits)
+  * 
+  * This works because current 48-bit addressing ensures 
+  *  that the top 16 bits of pointers are not used. 
+  */
+  inline fl_node<T>* 
+  get_fl_head(uint64_t n) {
     return (fl_node<T>*)(n & 0xffffffffffff);
   }
 
-  inline uint16_t get_fl_aba(uint64_t n) {
-    return (uint16_t) ((n &0xffff000000000000) >> (48));
+  inline uint16_t 
+  get_fl_aba(uint64_t n) {
+    return (uint16_t) ((n & 0xffff000000000000) >> (48));
   }
 
-  inline uint64_t get_fl(uint16_t aba, fl_node<T>* ptr) {
+  inline uint64_t 
+  get_fl(uint16_t aba, fl_node<T>* ptr) {
     return ((uint64_t)aba << 48) | (uintptr_t)ptr;
   }
 
@@ -127,25 +149,33 @@ llist<T>::llist()
 {
   //printf("Create list method\n");
   head = NULL;
-  _size = 0;
+  list_size = 0;
   fl_aba_head = 0;
 }
 
 template <typename T>
 llist<T>::~llist()
 {
-  // not for now
+  //printf("Delete list method\n");
+  node<T> *n = head;
+  while (head) {
+    head = get_unmarked_ref(head->next);
+    delete n;
+    n = head;
+  }
 }
 
 template <typename T>
 int llist<T>::size() 
 { 
-  return _size; 
+  return list_size; 
 } 
 
 /*
- * llist<T>::add inserts a new node with the given value val in the list
- * (if the value was absent) or does nothing (if the value is already present).
+ * add inserts a new node with the given value val in the list
+ * 
+ * If there is a position in free list, it tries to use the node
+ *  from free list. Otherwise, it allocates a new node as the new head.
  */
 template <typename T>
 node<T>* llist<T>::add(T val)
@@ -166,31 +196,27 @@ node<T>* llist<T>::add(T val)
     fl_aba_head_new = get_fl(fl_aba+1, fl_next);
   } while(fl_head && CAS_PTR(&fl_aba_head, fl_aba_head_last, fl_aba_head_new) != fl_aba_head_last);
 
-
   if (fl_head) {
     left = (node<T>*) fl_head;
     if (is_marked_ref(left->next)) {
-      
       left->next = get_unmarked_ref(left->next);
       left->data = val;
-      FAI_U32(&(_size));
+      FAI_U32(&(list_size));
       return left;
     }
-    fprintf(stderr, "ERROR3\n");
   }
   node<T> *new_elem = new node<T>(val, NULL);
   do {
     left = head;
     new_elem->next = left;
   } while(CAS_PTR(&head, left, new_elem) != left);
-  FAI_U32(&(_size));
+  FAI_U32(&(list_size));
   return new_elem;
 }
 
 /*
- * llist<T>::remove deletes a node with the given value val (if the value is present) 
- * or does nothing (if the value is already present).
- * The deletion is logical and consists of setting the node mark bit to 1.
+ * remove deletes a node with givien iterator 
+ * It adds the node to free list, so the node can be later reused.
  */
 template <typename T>
 void llist<T>::remove(node<T>* node)
@@ -212,12 +238,17 @@ void llist<T>::remove(node<T>* node)
     fl_new_node->next = fl_head;
     fl_aba_head_new = get_fl(fl_aba+1, fl_new_node);
     if (CAS_PTR(&(fl_aba_head), fl_aba_head_last, fl_aba_head_new) == fl_aba_head_last){
-      FAD_U32(&(_size));
+      FAD_U32(&(list_size));
       return;
     }
   }
 }
 
+/*
+ * check returns the size of the list by iterating through all nodes.
+ * 
+ * This function may ends in infinite loop if some terrible bug is present.
+ */
 template <typename T>
 int llist<T>::check() {
   node<T> *n, *unmarked;
@@ -233,6 +264,11 @@ int llist<T>::check() {
   return size;
 }
 
+/*
+ * print output current list into stdout
+ * 
+ *  This function may ends in infinite loop if some terrible bug is present.
+ */
 template <typename T>
 void llist<T>::print() {
   printf("free list head: [%016lx] \n", (uintptr_t)get_fl_head(fl_aba_head));
@@ -246,6 +282,11 @@ void llist<T>::print() {
   }
 }
 
+/*
+ * check_flist returns the number of nodes in free list.
+ * 
+ *  This function may ends in infinite loop if some terrible bug is present.
+ */
 template <typename T>
 int llist<T>::check_flist() {
   node<T> *n, *unmarked;
