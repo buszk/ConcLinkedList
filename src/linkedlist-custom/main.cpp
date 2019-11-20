@@ -8,8 +8,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include <vector>
-
 #include "linkedlist.h"
 #include "utils.h"
 
@@ -115,7 +113,8 @@ void *test(void *data)
     val_t the_value;
     int i;
     int last = -1;
-    std::vector<node_t*> pointers;
+    node_t * pointers[2000];
+    size_t size = 0;
 
     //before starting the test, we insert a number of elements in the data structure
     //we do this at each thread to avoid the situation where the entire data structure 
@@ -123,7 +122,7 @@ void *test(void *data)
     for (i=0;i<d->num_add;++i) {
         the_value = (val_t) my_random(&seeds[0],&seeds[1],&seeds[2]) & rand_max;
         //we make sure the insert was effective (as opposed to just updating an existing entry)
-        pointers.push_back(list_add(the_list,the_value));
+        pointers[size++] = list_add(the_list,the_value);
     }
 
     /* Wait on barrier */
@@ -134,14 +133,12 @@ void *test(void *data)
         the_value = my_random(&seeds[0],&seeds[1],&seeds[2]) & rand_max;
         if (last == -1 || last == -2) {
             //do a write operation
-            pointers.push_back(list_add(the_list,the_value));
+            pointers[size++] = list_add(the_list,the_value);
             d->num_insert++;
             last--;
         } else {
             //do a delete operation
-            int idx = the_value % pointers.size();
-            list_remove(the_list, pointers.at(idx));
-            pointers.erase(pointers.begin()+idx);
+            list_remove(the_list, pointers[--size]);
             d->num_remove++;
             if (last-- == -4) last = -1;
         }

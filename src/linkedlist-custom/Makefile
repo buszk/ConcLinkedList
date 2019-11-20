@@ -11,7 +11,7 @@ all:	main
 
 main: linkedlist.h main.cpp
 	#$(CC) $(CFLAGS) $(BUILDIR)/linkedlist.o  $(BUILDIR)/main.o -o $(BINS) $(LDFLAGS)
-	$(CXX) $(CFLAGS) -I ../../include main.cpp linkedlist.h -o $(BINS) $(LDFLAGS) -g -O0
+	$(CXX) $(CFLAGS) -I ../../include main.cpp linkedlist.h -o $(BINS) $(LDFLAGS) -g
 
 clean:
 	-rm -f $(BINS)

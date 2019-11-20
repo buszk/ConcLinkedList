@@ -36,7 +36,7 @@ typedef struct node
 typedef struct fl_node {
   node_t *padding_1;
   val_t padding_2;
-  fl_node *next;
+  struct fl_node *next;
 } fl_node_t;
 
 typedef struct llist 
@@ -71,7 +71,7 @@ int list_contains(llist_t *the_list, val_t val);
 //return 0 if value already in the list, positive number otherwise
 node_t* list_add(llist_t *the_list, val_t val);
 //return 0 if value already in the list, positive number otherwise
-void list_remove(llist_t *the_list, val_t val);
+void list_remove(llist_t *the_list, node_t* val);
 void list_delete(llist_t *the_list);
 int list_size(llist_t *the_list);
 int list_check(llist_t *the_list);
@@ -227,7 +227,7 @@ void list_remove(llist_t *the_list, node_t* node)
   node->next = get_marked_ref(node->next);
   fl_node = (fl_node_t*) node;
 
-  while (true) {
+  while (1) {
     fl_last = the_list->fl;
     fl_head = get_fl_head(fl_last);
     fl_aba = get_fl_aba(fl_last);
